@@ -40,16 +40,28 @@ Copy-Item .assistant\state.json.template ~\.claude-assistant\state.json
 **After PowerShell setup, open WSL and run:**
 
 ```bash
+# Find your Windows username first
+WINDOWS_USER=$(cmd.exe /c "echo %USERNAME%" 2>/dev/null | tr -d '\r')
+echo "Windows username: $WINDOWS_USER"
+
 # WSL will use the Windows claude-shared folder automatically!
-# Just run the bash script
-/mnt/c/Users/fredb/claude-shared/setup-symlinks.sh
+# Run the bash script
+/mnt/c/Users/$WINDOWS_USER/claude-shared/setup-symlinks.sh
 
 # Set up assistant state
 mkdir -p ~/.claude-assistant
-cp /mnt/c/Users/fredb/claude-shared/.assistant/state.json.template ~/.claude-assistant/state.json
+cp /mnt/c/Users/$WINDOWS_USER/claude-shared/.assistant/state.json.template ~/.claude-assistant/state.json
 ```
 
 **Note:** WSL accesses Windows files at `/mnt/c/`, so both PowerShell and WSL projects share the same commands!
+
+**If the auto-detection doesn't work, replace `$WINDOWS_USER` with your actual Windows username (e.g., `Fred`):**
+```bash
+# Manual version (replace Fred with your Windows username)
+/mnt/c/Users/Fred/claude-shared/setup-symlinks.sh
+mkdir -p ~/.claude-assistant
+cp /mnt/c/Users/Fred/claude-shared/.assistant/state.json.template ~/.claude-assistant/state.json
+```
 
 ---
 
