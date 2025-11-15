@@ -1,0 +1,27 @@
+{
+  "version": "1.0",
+  "user": {
+    "name": "Fred",
+    "preferences": {
+      "intervention_style": "gentle",
+      "stuck_threshold": 3,
+      "sidequest_time_limit_minutes": 30,
+      "celebrates_completions": true
+    }
+  },
+  "current_session": {
+    "project": "",
+    "started_at": "",
+    "primary_goal": "",
+    "focus_mode": false,
+    "side_quests": [],
+    "stuck_signals": 0,
+    "last_progress_time": ""
+  },
+  "projects": {},
+  "history": {
+    "completed_side_quests": [],
+    "stuck_moments": [],
+    "focus_sessions": []
+  }
+}
