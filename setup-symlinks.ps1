@@ -2,44 +2,71 @@
 # Auto-discovers and sets up symlinks to shared Claude commands
 # Works on: Windows PowerShell
 
-Write-Host "`nClaude Commands Symlink Auto-Setup" -ForegroundColor Yellow
-Write-Host "====================================" -ForegroundColor Yellow
-Write-Host ""
+[CmdletBinding()]
+param(
+    [Parameter(HelpMessage="Path to the shared commands directory.")]
+    [string]$SharedCommands = "$env:USERPROFILE\claude-shared\commands",
 
-# Shared commands location
-$SHARED_COMMANDS = "$env:USERPROFILE\claude-shared\commands"
-$DEFAULT_SEARCH = $env:USERPROFILE
-$ROOT_SEARCH = "C:\"
+    [Parameter(HelpMessage="Root path to search for projects. Defaults to user profile.")]
+    [string]$SearchPath = $env:USERPROFILE,
 
-Write-Host "Shared commands: $SHARED_COMMANDS"
-Write-Host ""
+    [Parameter(HelpMessage="Switch to search the entire C:\ drive.")]
+    [switch]$SearchAll,
 
-# Ask if they want to search entire drive
-$searchChoice = Read-Host "Search entire C:\ drive? (slower but thorough) [y/N]"
-if ($searchChoice -match '^[Yy]$') {
-    $SEARCH_ROOT = $ROOT_SEARCH
-    Write-Host "Searching entire drive: $SEARCH_ROOT" -ForegroundColor Blue
-} else {
-    $SEARCH_ROOT = $DEFAULT_SEARCH
-    Write-Host "Searching user directory: $SEARCH_ROOT" -ForegroundColor Blue
+    [Parameter(HelpMessage="Switch to bypass the confirmation prompt and apply changes.")]
+    [switch]$Force
+)
+
+# Colors for output
+$Green = "Green"
+$Yellow = "Yellow"
+$Red = "Red"
+$Cyan = "Cyan"
+$Blue = "Blue"
+
+function Write-Step { param([string]$Message) Write-Host "`n==> $Message" -ForegroundColor $Cyan }
+function Write-Success { param([string]$Message) Write-Host "  ✓ $Message" -ForegroundColor $Green }
+function Write-Warning { param([string]$Message) Write-Host "  ⚠ $Message" -ForegroundColor $Yellow }
+function Write-Error { param([string]$Message) Write-Host "  ✗ $Message" -ForegroundColor $Red }
+
+# Check for admin privileges (required for symlinks on Windows)
+$isAdmin = ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+if (-not $isAdmin) {
+    Write-Error "This script requires Administrator privileges to create symlinks."
+    Write-Host "Please run PowerShell as Administrator and try again.`n"
+    exit 1
 }
+
+Write-Step "Claude Commands Symlink Auto-Setup"
+
+if ($SearchAll) {
+    $SearchPath = "C:\"
+}
+
+Write-Host "Shared commands path: $SharedCommands"
+Write-Host "Project search path:  $SearchPath"
 Write-Host ""
 
 # Check if shared commands folder exists
-if (-not (Test-Path $SHARED_COMMANDS)) {
-    Write-Host "ERROR: Shared commands folder not found at $SHARED_COMMANDS" -ForegroundColor Red
-    Write-Host "Please create it first and add your command files (.md)"
+if (-not (Test-Path $SharedCommands)) {
+    Write-Error "Shared commands folder not found at $SharedCommands"
+    Write-Host "Please create it first and add your command files (.md)."
     exit 1
 }
 
 # List command files
-Write-Host "Available commands:" -ForegroundColor Blue
-Get-ChildItem "$SHARED_COMMANDS\*.md" | ForEach-Object { Write-Host "  $($_.Name)" }
+Write-Host "Available shared commands:" -ForegroundColor $Blue
+$sharedCommandFiles = Get-ChildItem "$SharedCommands\*.md"
+if ($sharedCommandFiles) {
+    $sharedCommandFiles | ForEach-Object { Write-Host "  - $($_.Name)" }
+} else {
+    Write-Warning "No command files (.md) found in shared commands folder."
+}
 Write-Host ""
 
 # Auto-discover .claude folders
-Write-Host "Searching for Claude Code projects..." -ForegroundColor Blue
-Write-Host "(This may take a moment)"
+Write-Step "Searching for Claude Code projects..."
+Write-Host "(This may take a moment, depending on the search path)"
 Write-Host ""
 
 # Find all .claude directories, excluding the global one and claude-shared
@@ -62,8 +89,8 @@ Get-ChildItem -Path $SEARCH_ROOT -Directory -Recurse -Filter ".claude" -ErrorAct
 }
 
 # Show discovered projects
-if ($claudeDirs.Count -eq 0) {
-    Write-Host "No Claude Code projects found." -ForegroundColor Yellow
+if ($claudeDirs.Count -eq 0) { 
+    Write-Warning "No Claude Code projects found in '$SearchPath'."
     Write-Host ""
     Write-Host "Claude Code projects have a .claude folder in their root."
     Write-Host "Start Claude Code in a project directory to create one."
@@ -79,7 +106,7 @@ foreach ($project in $claudeDirs) {
         $item = Get-Item $commandsPath
         if ($item.Attributes -match "ReparsePoint") {
             $target = $item.Target
-            if ($target -like "*claude-shared\commands*") {
+            if ($target -eq $SharedCommands) {
                 Write-Host "  " -NoNewline
                 Write-Host "✓" -ForegroundColor Green -NoNewline
                 Write-Host " $project " -NoNewline
@@ -105,20 +132,13 @@ foreach ($project in $claudeDirs) {
 }
 Write-Host ""
 
-# Check for admin privileges (required for symlinks on Windows)
-$isAdmin = ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
-
-if (-not $isAdmin) {
-    Write-Host "ERROR: This script requires Administrator privileges to create symlinks." -ForegroundColor Red
-    Write-Host "Please run PowerShell as Administrator and try again.`n"
-    exit 1
-}
-
 # Ask for confirmation
-$response = Read-Host "Set up symlinks for all projects? [y/N]"
-if ($response -notmatch '^[Yy]$') {
-    Write-Host "Cancelled."
-    exit 0
+if (-not $Force) {
+    $response = Read-Host "Proceed with setting up symlinks for all 'needs setup' projects? [y/N]"
+    if ($response -notmatch '^[Yy]$') {
+        Write-Host "`nOperation cancelled by user." -ForegroundColor $Yellow
+        exit 0
+    }
 }
 
 Write-Host ""
@@ -129,7 +149,7 @@ $skipCount = 0
 $failCount = 0
 
 foreach ($project in $claudeDirs) {
-    Write-Host "Processing: $project" -ForegroundColor Yellow
+    Write-Host "Processing: $project" -ForegroundColor $Blue
 
     $claudeDir = Join-Path $project ".claude"
     $commandsPath = Join-Path $claudeDir "commands"
@@ -138,19 +158,18 @@ foreach ($project in $claudeDirs) {
     if (Test-Path $commandsPath) {
         $item = Get-Item $commandsPath
         if ($item.Attributes -match "ReparsePoint") {
-            $target = $item.Target
-            if ($target -like "*claude-shared\commands*") {
-                Write-Host "  ⊙ Already correctly linked, skipping" -ForegroundColor Blue
+            if ($item.Target -eq $SharedCommands) {
+                Write-Host "  ⊙ Already correctly linked, skipping." -ForegroundColor $Blue
                 $skipCount++
                 Write-Host ""
                 continue
             }
         }
-    }
+    } 
 
     # Check if project exists
     if (-not (Test-Path $project)) {
-        Write-Host "  ✗ Project directory not accessible, skipping" -ForegroundColor Red
+        Write-Error "Project directory not accessible, skipping."
         $failCount++
         Write-Host ""
         continue
@@ -168,43 +187,41 @@ foreach ($project in $claudeDirs) {
             $timestamp = Get-Date -Format "yyyyMMdd_HHmmss"
             $backupName = "commands.backup.$timestamp"
             $backupPath = Join-Path $claudeDir $backupName
-            Move-Item $commandsPath $backupPath -Force
-            Write-Host "  - Backed up existing commands to $backupName"
+            Move-Item -Path $commandsPath -Destination $backupPath -Force
+            Write-Host "  - Backed up existing 'commands' directory to '$backupName'."
         } else {
-            Remove-Item $commandsPath -Force
-            Write-Host "  - Removed old symlink"
+            Remove-Item -Path $commandsPath -Force -Recurse
+            Write-Host "  - Removed old/incorrect symlink."
         }
     }
 
     # Create symlink
     try {
-        New-Item -ItemType SymbolicLink -Path $commandsPath -Target $SHARED_COMMANDS -Force | Out-Null
+        New-Item -ItemType SymbolicLink -Path $commandsPath -Target $SharedCommands -Force | Out-Null
 
         # Verify symlink
-        if ((Test-Path $commandsPath) -and ((Get-Item $commandsPath).Attributes -match "ReparsePoint")) {
-            Write-Host "  ✓ Symlink created successfully" -ForegroundColor Green
-            Write-Host "  - Commands available:"
-            Get-ChildItem "$commandsPath\*.md" | ForEach-Object { Write-Host "    $($_.Name)" }
+        $newItem = Get-Item $commandsPath -Force
+        if (($newItem.Attributes -match "ReparsePoint") -and ($newItem.Target -eq $SharedCommands)) {
+            Write-Success "Symlink created successfully."
             $successCount++
         } else {
-            Write-Host "  ✗ Failed to create symlink" -ForegroundColor Red
+            Write-Error "Failed to create or verify symlink."
             $failCount++
         }
     } catch {
-        Write-Host "  ✗ Failed to create symlink: $($_.Exception.Message)" -ForegroundColor Red
+        Write-Error "An exception occurred while creating symlink: $($_.Exception.Message)"
         $failCount++
     }
 
     Write-Host ""
 }
 
-# Summary
-Write-Host "===================================="
-Write-Host "✓ Success: $successCount project(s)" -ForegroundColor Green
+Write-Step "Setup Complete"
+Write-Host "✓ Success: $successCount project(s) linked." -ForegroundColor $Green
 if ($skipCount -gt 0) {
-    Write-Host "⊙ Skipped: $skipCount project(s) (already linked)" -ForegroundColor Blue
+    Write-Host "⊙ Skipped: $skipCount project(s) (already linked)." -ForegroundColor $Blue
 }
 if ($failCount -gt 0) {
-    Write-Host "✗ Failed: $failCount project(s)" -ForegroundColor Red
+    Write-Host "✗ Failed:  $failCount project(s) (see errors above)." -ForegroundColor $Red
 }
-Write-Host "`nDone! Your commands are now synced across all projects.`n"
+Write-Host "`nYour commands are now synced across all processed projects.`n" -ForegroundColor $Green
